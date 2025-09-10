@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>neoshop • Cart</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="app-header"></div>
+  <main class="container">
+    <h2>Your Cart</h2>
+    <div id="cartWrap"></div>
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn secondary" href="index.html">Continue Shopping</a>
+      <a class="btn" id="goCheckout">Checkout</a>
+      <button class="btn danger" id="clearBtn">Clear Cart</button>
+      <a class="btn ghost" href="orders.html">My Orders</a> <!-- ✅ new button -->
+    </div>
+  </main>
+  <div id="app-footer" style="margin-top: 180px;"></div>
+
+  <script type="module">
+  import { mountHeader, mountFooter, isLoggedIn } from './js/layout.js';
+  import { apiGet, apiSend, money, getUserId, getProductImage } from './js/api.js';
+
+  const wrap = document.getElementById('cartWrap');
+
+  if (!isLoggedIn()) {
+    location.href = 'auth.html';
+  }
+
+  function normalizeItem(item){
+    const p = item.product || item;
+    const pid = p.id ?? p.productId ?? item.productId ?? item.id;
+    const code = p.productCode ?? p.code ?? item.productCode;
+    const name = p.productName ?? p.name ?? item.productName ?? 'Product';
+    const price = Number(p.productPrice ?? item.price ?? item.productPrice ?? 0);
+    const qty = Number(item.quantity ?? item.qty ?? 1);
+    return { pid, code, name, price, qty, p };
+  }
+
+  function row(item){
+    const it = normalizeItem(item);
+    const img = getProductImage(it.p);
+    const subtotal = it.price * it.qty;
+    return `<tr data-pid="${it.pid ?? ''}">
+      <td style="width:72px"><img src="${img}" alt="${it.name}" style="width:72px;height:54px;object-fit:cover;border-radius:8px"/></td>
+      <td>${it.name}</td>
+      <td>${money(it.price)}</td>
+      <td><input type="number" class="qty" value="${it.qty}" min="1" style="width:80px"/></td>
+      <td>${money(subtotal)}</td>
+      <td><button class="btn danger remove">Remove</button></td>
+    </tr>`;
+  }
+
+  async function load(){
+    wrap.innerHTML = '<div class="empty">Loading cart…</div>';
+    try{
+      const uid = getUserId();
+      const cart = await apiGet(`/api/cart/${encodeURIComponent(uid)}`);
+      const items = Array.isArray(cart) ? cart
+                  : cart.items ? cart.items
+                  : cart.cartItems ? cart.cartItems
+                  : cart.content ? cart.content
+                  : [];
+
+      if(!Array.isArray(items) || items.length === 0){
+        wrap.innerHTML = '<div class="empty">Your cart is empty.</div>';
+        return;
+      }
+
+      wrap.innerHTML = `
+        <table class="table">
+          <thead><tr><th></th><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>
+          <tbody>${items.map(row).join('')}</tbody>
+        </table>
+        <hr class="sep"/>
+        <div id="total" class="right"></div>
+      `;
+
+      wrap.querySelectorAll('tr').forEach(tr=>{
+        const pid = tr.dataset.pid;
+        const qtyInput = tr.querySelector('.qty');
+        const removeBtn = tr.querySelector('.remove');
+
+        if(qtyInput && pid){
+          qtyInput.addEventListener('change', async (e)=>{
+            const q = Math.max(1, Number(e.target.value || 1));
+            try{
+              await apiSend('PUT', `/api/cart/${encodeURIComponent(uid)}/update/${encodeURIComponent(pid)}?quantity=${q}`);
+            }catch{}
+            load();
+          });
+        }
+        if(removeBtn && pid){
+          removeBtn.addEventListener('click', async ()=>{
+            try{
+              await apiSend('DELETE', `/api/cart/${encodeURIComponent(uid)}/remove/${encodeURIComponent(pid)}`);
+            }catch{}
+            load();
+          });
+        }
+      });
+
+      let totalText = '';
+      try{
+        const t = await apiGet(`/api/cart/${encodeURIComponent(uid)}/total`);
+        const totalNum = typeof t === 'number' ? t : (t.total ?? t.amount ?? 0);
+        totalText = money(totalNum);
+      }catch{
+        let sum = 0;
+        wrap.querySelectorAll('tbody tr').forEach(tr=>{
+          const price = Number((tr.children[2].textContent || '0').replace(/[^0-9.]/g,''));
+          const qty = Number(tr.querySelector('.qty')?.value || 1);
+          sum += price * qty;
+        });
+        totalText = money(sum);
+      }
+      document.getElementById('total').textContent = 'Total: ' + totalText;
+
+    }catch(err){
+      wrap.innerHTML = `<div class="empty">Failed to load cart.<br/><small>${err.message}</small></div>`;
+    }
+  }
+
+  document.getElementById('goCheckout').addEventListener('click', ()=> location.href='checkout.html');
+  document.getElementById('clearBtn').addEventListener('click', async ()=>{
+    const uid = getUserId();
+    await apiSend('DELETE', `/api/cart/${encodeURIComponent(uid)}/clear`);
+    load();
+  });
+
+  mountHeader('cart'); 
+  mountFooter(); 
+  load();
+</script>
+</body>
+</html>

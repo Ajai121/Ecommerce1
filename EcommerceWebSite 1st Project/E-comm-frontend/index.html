@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>neoshop • Home</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="app-header"></div>
+  <main class="container">
+    <div class="banner">
+      <h2 style="margin:0 0 4px 0">Find your next favorite</h2>
+      <div class="small">Browse by category or search products powered by your API.</div>
+    </div>
+    <div class="grid">
+  <aside class="sidebar">
+    <h3 style="margin-top:10">Categories</h3>
+    <div id="categories" class="chips"></div>
+    <hr class="sep"/>
+    <button id="resetCat" class="btn secondary" style="width:100%">Show All</button>
+  </aside>
+  <section class="main">
+    <div class="products" id="products"></div>
+  </section>
+</div>
+
+  </main>
+  <div id="app-footer"></div>
+
+  <script type="module">
+  import { mountHeader, mountFooter, bindSearch, isLoggedIn } from './js/layout.js';
+  import { apiGet, apiSend, money, getUserId, getProductImage } from './js/api.js';
+
+  const productsEl = document.getElementById('products');
+  const catsEl = document.getElementById('categories');
+  const state = { category: null, products: [] };
+
+  function productCard(p){
+    const price = money(p.productPrice);
+    const img = getProductImage(p);
+    const name = p.productName || p.name || 'Product';
+    const code = p.productCode || p.code || p.id;
+    const id = p.id || p.productId || code;
+    return `
+    <article class="card">
+      <a href="product.html?code=${encodeURIComponent(code)}">
+        <div class="thumb"><img src="${img}" alt="${name}"/></div>
+      </a>
+      <div class="body">
+        <div class="title">${name}</div>
+        <div class="muted">${(p.category && (p.category.name || p.category)) || ''}</div>
+        <div class="price">${price}</div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <a class="btn ghost" href="product.html?code=${encodeURIComponent(code)}">View</a>
+          <button class="btn add" data-id="${id}">Add</button>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  async function loadProducts(){
+    productsEl.innerHTML = '<div class="empty">Loading products…</div>';
+    try{
+      const list = state.category
+        ? await apiGet(`/api/product/category/${encodeURIComponent(state.category)}`)
+        : await apiGet('/api/product/allProduct');
+      state.products = Array.isArray(list) ? list : (list.content || []);
+      if(state.products.length === 0){
+        productsEl.innerHTML = '<div class="empty">No products found.</div>';
+        return;
+      }
+      productsEl.innerHTML = state.products.map(productCard).join('');
+      bindAddButtons();
+    }catch(err){
+      productsEl.innerHTML = `<div class="empty">Failed to load products.<br/><small>${err.message}</small></div>`;
+    }
+  }
+
+  function bindAddButtons(){
+    document.querySelectorAll('.add').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        if(!isLoggedIn()){
+          location.href = 'auth.html';
+          return;
+        }
+        const pid = btn.dataset.id;
+        const uid = getUserId();
+        try{
+          await apiSend('POST', `/api/cart/${encodeURIComponent(uid)}/add/${encodeURIComponent(pid)}?quantity=1`);
+          alert('✅ Added to cart!');
+        }catch(err){
+          alert('❌ Failed: ' + err.message);
+        }
+      });
+    });
+  }
+
+  async function loadCategories(){
+    catsEl.innerHTML = '<span class="small">Loading…</span>';
+    try{
+      const cats = await apiGet('/api/category/allCategory');
+      const names = cats.map(c => c.name || c.categoryName || c);
+      catsEl.innerHTML = names.map(n => `<span class="chip" data-name="${n}">${n}</span>`).join('');
+      catsEl.querySelectorAll('.chip').forEach(el => {
+        el.addEventListener('click', () => {
+          catsEl.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+          el.classList.add('active');
+          state.category = el.dataset.name;
+          loadProducts();
+        });
+      });
+    }catch(err){
+      catsEl.innerHTML = `<div class="empty">Failed to load categories.<br/><small>${err.message}</small></div>`;
+    }
+  }
+
+  document.getElementById('resetCat').addEventListener('click', ()=>{
+    state.category = null;
+    catsEl.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    loadProducts();
+  });
+
+  mountHeader('home');
+  mountFooter();
+
+  // ✅ Fix search binding (must happen after header mount)
+  bindSearch(async (q)=>{
+    if(!q){ loadProducts(); return; }
+    productsEl.innerHTML = '<div class="empty">Searching…</div>';
+    try{
+      const list = await apiGet(`/api/product/search?productName=${encodeURIComponent(q)}`);
+      const items = Array.isArray(list) ? list : (list.content || []);
+      productsEl.innerHTML = items.length ? items.map(productCard).join('') : '<div class="empty">No matches.</div>';
+      bindAddButtons();
+    }catch(err){
+      productsEl.innerHTML = `<div class="empty">Search failed.<br/><small>${err.message}</small></div>`;
+    }
+  });
+
+  loadCategories();
+  loadProducts();
+</script>
+
+</body>
+</html> 

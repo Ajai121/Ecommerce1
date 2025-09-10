@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Neoshop • Register</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f7fa; margin:0; }
+    main { display:flex; justify-content:center; align-items:center; height:100vh; }
+    .card { background:#fff; padding:32px; border-radius:16px; width:100%; max-width:400px;
+            box-shadow:0 6px 20px rgba(0,0,0,0.12); }
+    h2 { margin-bottom:20px; text-align:center; }
+    .kv { display:flex; flex-direction:column; margin:12px 0; }
+    .kv label { font-size:14px; margin-bottom:6px; color:#333; }
+    .kv input { padding:12px; border:1px solid #ccc; border-radius:8px; font-size:15px; }
+    .btn { width:100%; padding:12px; margin-top:12px; font-size:16px; font-weight:bold;
+           background:#28a745; color:#fff; border:none; border-radius:8px; cursor:pointer;
+           transition:0.3s; }
+    .btn:hover { background:#218838; }
+    .small { font-size:13px; margin-top:10px; text-align:center; }
+    .link { color:#0077ff; cursor:pointer; text-decoration:none; }
+    .link:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>Create Account</h2>
+      <div class="kv"><label>Name</label><input id="regName" placeholder="John Doe"/></div>
+      <div class="kv"><label>Email</label><input id="regEmail" type="email" placeholder="you@example.com"/></div>
+      <div class="kv"><label>Password</label><input id="regPass" type="password" placeholder="••••••"/></div>
+      <button id="registerBtn" class="btn">Register</button>
+      <div id="regMsg" class="small"></div>
+      <div class="small">Already have an account? <a href="auth.html" class="link">Login</a></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { apiSend } from './js/api.js';
+
+    async function register(){
+      const name=document.getElementById('regName').value.trim();
+      const email=document.getElementById('regEmail').value.trim();
+      const pass=document.getElementById('regPass').value.trim();
+      const msg = document.getElementById('regMsg');
+      if(!name||!email||!pass){ msg.textContent='Fill all fields'; return; }
+
+      try{
+        const res = await apiSend('POST','/api/user/newUser',{
+          username: name,
+          userEmail: email,
+          userPhone: pass   // password stored in userPhone column
+        });
+        const id = res?.id || res?.userId;
+        if(id){
+          localStorage.setItem('userId', String(id));
+          localStorage.setItem('userName', name);
+
+          msg.textContent='✅ Registered! Redirecting…';
+          setTimeout(()=>location.href='index.html',700);
+        } else {
+          msg.textContent='Registered, but no ID returned.';
+        }
+      } catch(err){
+        msg.textContent = '❌ ' + (err?.message || 'Network error while registering');
+      }
+    }
+
+    document.getElementById('registerBtn').addEventListener('click', register);
+  </script>
+</body>
+</html>

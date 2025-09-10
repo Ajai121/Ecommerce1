@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Neoshop • Login</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f7fa; margin:0; }
+    main { min-height: calc(100vh - 70px);display:flex; justify-content:center; align-items:center; height:100vh; }
+    .card { background:#fff; padding:32px; border-radius:16px; width:100%; max-width:400px;
+            box-shadow:0 6px 20px rgba(0,0,0,0.12); }
+    h2 { margin-bottom:20px; text-align:center; }
+    .kv { display:flex; flex-direction:column; margin:12px 0; }
+    .kv label { font-size:14px; margin-bottom:6px; color:#333; }
+    .kv input { padding:12px; border:1px solid #ccc; border-radius:8px; font-size:15px; }
+    .btn { width:100%; padding:12px; margin-top:12px; font-size:16px; font-weight:bold;
+           background:#0077ff; color:#fff; border:none; border-radius:8px; cursor:pointer;
+           transition:0.3s; }
+    .btn:hover { background:#005fcc; }
+    .small { font-size:13px; margin-top:10px; text-align:center; }
+    .link { color:#0077ff; cursor:pointer; text-decoration:none; }
+    .link:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>Welcome Back</h2>
+      <div class="kv"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com"/></div>
+      <div class="kv"><label>Password</label><input id="loginPass" type="password" placeholder="••••••"/></div>
+      <button id="loginBtn" class="btn">Login</button>
+      <div id="loginMsg" class="small"></div>
+      <div class="small">Don’t have an account? <a href="register.html" class="link">Register</a></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { apiGet } from './js/api.js';
+
+    async function login(){
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass  = document.getElementById('loginPass').value.trim();
+      const msg   = document.getElementById('loginMsg');
+      if(!email || !pass){ msg.textContent='Fill all fields'; return; }
+
+      msg.textContent = 'Checking…';
+      try {
+        const users = await apiGet('/api/user/allUsers');
+
+        const user = users.find(u =>
+          (u.userEmail?.toLowerCase() === email.toLowerCase()) &&
+          (u.userPhone === pass)   // password stored in userPhone
+        );
+
+        if (user) {
+          const id = user.id || user.userId;
+          const name = user.username || user.name;
+          if (!id) { msg.textContent = 'User found but no id returned.'; return; }
+
+          localStorage.setItem('userId', String(id));
+          localStorage.setItem('userName', name);
+
+          msg.textContent = '✅ Logged in! Redirecting…';
+          setTimeout(()=>location.href='index.html', 700);
+        } else {
+          msg.textContent = '❌ Invalid email or password';
+        }
+      } catch (err) {
+        msg.textContent = '❌ ' + (err?.message || 'Network error while logging in');
+      }
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', login);
+  </script>
+</body>
+</html>

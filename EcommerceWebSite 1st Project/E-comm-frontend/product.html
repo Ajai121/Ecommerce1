@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>neoshop • Product</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="app-header"></div>
+  <main class="container">
+    <div id="pwrap" class="grid">
+      <section class="main" id="pcontent"></section>
+      <aside class="sidebar">
+        <h3>Details</h3>
+        <div class="small" id="pmeta"></div>
+      </aside>
+    </div>
+  </main>
+  <div id="app-footer"></div>
+
+  <script type="module">
+    import { mountHeader, mountFooter, isLoggedIn } from './js/layout.js';
+    import { apiGet, apiSend, money, getUserId, getProductImage } from './js/api.js';
+
+    function getParam(name){
+      const u = new URL(location.href);
+      return u.searchParams.get(name);
+    }
+
+    const code = getParam('code');
+    const pcontent = document.getElementById('pcontent');
+    const pmeta = document.getElementById('pmeta');
+
+    async function load(){
+      pcontent.innerHTML = '<div class="empty">Loading product…</div>';
+      try{
+        const p = await apiGet(`/api/product/code/${encodeURIComponent(code)}`);
+        if (!p) {
+          pcontent.innerHTML = '<div class="empty">Product not found.</div>';
+          return;
+        }
+
+        const img = getProductImage(p);
+        const name = p.productName || 'Product';
+        const desc = p.productDetails || p.description || '—';
+        const price = money(p.productPrice);
+        const pid = p.id || p.productId;
+        const cat = (p.category && (p.category.name || p.category)) || '';
+
+        pcontent.innerHTML = `
+          <article class="card">
+            <div class="thumb"><img src="${img}" alt="${name}"></div>
+            <div class="body">
+              <h2 style="margin:0 0 8px 0">${name}</h2>
+              <div class="muted">${cat}</div>
+              <div class="price" style="margin:10px 0">${price}</div>
+              <p class="muted">${desc}</p>
+              <div class="quantity" style="margin-top:12px">
+                <label>Qty</label>
+                <input id="qty" type="number" value="1" min="1"/>
+                <button id="addBtn" class="btn">Add to Cart</button>
+              </div>
+            </div>
+          </article>
+        `;
+
+        pmeta.innerHTML = `
+          <div class="kv"><label>Code</label><div>${code}</div></div>
+          <div class="kv"><label>ID</label><div>${pid ?? '—'}</div></div>
+          <div class="kv"><label>Category</label><div>${cat || '—'}</div></div>
+          <div class="kv"><label>Stock</label><div>${p.productQuantity ?? '—'}</div></div>
+        `;
+
+        // Add to cart logic
+        document.getElementById('addBtn').addEventListener('click', async () => {
+          if (!isLoggedIn()) {
+            location.href = 'auth.html';
+            return;
+          }
+
+          const q = Math.max(1, Number(document.getElementById('qty').value || 1));
+          const uid = getUserId();
+
+          if(!pid) { 
+            alert('Product ID missing in API response.'); 
+            return; 
+          }
+
+          try{
+            await apiSend('POST', `/api/cart/${encodeURIComponent(uid)}/add/${encodeURIComponent(pid)}?quantity=${q}`);
+            alert('✅ Added to cart!');
+          }catch(err){
+            alert('❌ Failed to add to cart: ' + err.message);
+          }
+        });
+
+      }catch(err){
+        pcontent.innerHTML = `<div class="empty">Failed to load product.<br/><small>${err.message}</small></div>`;
+      }
+    }
+
+    mountHeader();
+    mountFooter();
+    load();
+  </script>
+</body>
+</html>

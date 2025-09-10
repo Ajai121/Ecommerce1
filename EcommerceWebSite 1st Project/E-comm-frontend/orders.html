@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>neoshop • My Orders</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="app-header"></div>
+  <main class="container">
+    <h2>My Orders</h2>
+    <div class="card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Items</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="orderRows">
+          <tr><td colspan="5">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+  <div id="app-footer" style="margin-top: 180px;"></div>
+
+  <script type="module">
+    import { mountHeader, mountFooter, isLoggedIn } from './js/layout.js';
+    import { apiGet, apiSend, money, getUserId } from './js/api.js';
+
+    if (!isLoggedIn()) {
+      location.href = 'auth.html';
+    }
+
+    // Normalize order from backend
+    function normalizeOrder(order){
+      return {
+        id: order.id,
+        status: order.orderStatus ?? order.status ?? "PENDING",
+        total: order.totalAmount ?? order.total ?? 0,
+        items: order.orderItems ?? []
+      };
+    }
+
+    async function loadOrders(){
+      const uid = getUserId();
+      try{
+        const orders = await apiGet(`/api/orders/user/${encodeURIComponent(uid)}`);
+        if(!orders || orders.length === 0){
+          document.getElementById('orderRows').innerHTML =
+            `<tr><td colspan="5">No orders yet.</td></tr>`;
+          return;
+        }
+
+        const rows = orders.map(o=>{
+          const ord = normalizeOrder(o);
+          const itemList = ord.items.map(it=>
+            `${it.product?.productName || "Item"} × ${it.quantity ?? 1}`
+          ).join("<br/>");
+          return `<tr>
+            <td>${ord.id}</td>
+            <td>${ord.status}</td>
+            <td>${money(ord.total)}</td>
+            <td>${itemList || "—"}</td>
+            <td>
+              ${ord.status === "PENDING" ? 
+                `<button class="btn danger cancel" data-id="${ord.id}">Cancel</button>` 
+                : "—"}
+            </td>
+          </tr>`;
+        }).join("");
+        document.getElementById('orderRows').innerHTML = rows;
+
+        // bind cancel buttons
+        document.querySelectorAll('.cancel').forEach(btn=>{
+          btn.addEventListener('click', async ()=>{
+            const oid = btn.dataset.id;
+            if(!confirm("Cancel order #" + oid + "?")) return;
+            try{
+              await apiSend('PUT', `/api/orders/${encodeURIComponent(oid)}/cancel`);
+              loadOrders();
+            }catch(err){
+              alert("❌ Failed: " + err.message);
+            }
+          });
+        });
+
+      }catch(err){
+        document.getElementById('orderRows').innerHTML =
+          `<tr><td colspan="5">Failed to load orders.<br/><small>${err.message}</small></td></tr>`;
+      }
+    }
+
+    mountHeader('orders'); 
+    mountFooter(); 
+    loadOrders();
+  </script>
+</body>
+</html>
